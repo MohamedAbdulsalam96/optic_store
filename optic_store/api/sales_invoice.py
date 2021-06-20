@@ -16,6 +16,7 @@ from functools import partial, reduce
 from toolz import compose, unique, pluck, concat, merge, excepts, groupby, valmap, first
 
 from optic_store.utils import sum_by, pick, mapf, filterf
+from optic_store.api.loyalty_program import get_customer_loyalty_details
 
 _filter_batch_items = partial(
     filter, lambda x: frappe.db.get_value("Item", x.item_code, "has_batch_no")
@@ -29,6 +30,7 @@ def get_state_to_complete(doctype):
         "Workflow Transition",
         filters={"parent": workflow_name, "action": "Complete"},
         fieldname="state",
+        order_by="idx desc",
     )
 
 
@@ -87,7 +89,10 @@ def deliver_qol(name, payments=[], batches=None, deliver=0):
                         or get_item("batch_no", batch.get("batch_no"))
                         or get_item("item_code", batch.get("item_code"))
                     ),
-                    pick(["item_code", "batch_no", "qty"], batch,),
+                    pick(
+                        ["item_code", "batch_no", "qty"],
+                        batch,
+                    ),
                     {"si_detail": si_detail} if si_detail else {},
                 )
                 dn.append("items", item)
@@ -342,6 +347,7 @@ def get_ref_so_statuses(sales_invoice):
         ),
         _get_sales_orders,
     )
+    print(get_statuses(sales_invoice))
     return get_statuses(sales_invoice)
 
 
@@ -363,6 +369,31 @@ def validate_loyalty(doc):
             _(
                 "Loyalty validation failed."
                 "Please correct loyalty fields or contact System Manager."
+            )
+        )
+
+    minimum_points = frappe.utils.cint(
+        frappe.db.get_single_value("Optical Store Settings", "minimum_points")
+    )
+
+    data = frappe._dict(
+        pick(["customer", "os_loyalty_card_no", "company"], get_dict(doc))
+    )
+    customer_loyalty_details = get_customer_loyalty_details(
+        data.get("customer"),
+        data.get("os_loyalty_card_no"),
+        frappe.utils.today(),
+        data.get("company"),
+    )
+    if (
+        minimum_points
+        and customer_loyalty_details.get("loyalty_points") <= minimum_points
+    ):
+        frappe.throw(
+            _(
+                "Customer should have minimum of {} pts to redeem. Available points are {} pts.".format(
+                    minimum_points, customer_loyalty_details.get("loyalty_points")
+                ),
             )
         )
 
@@ -459,3 +490,16 @@ def get_credit_notes(customer):
             fields=["name", "outstanding_amount", "posting_date"],
         )
     ]
+
+
+def get_loyalty_points_earned(sales_invoice):
+    loyalty_point_entry = frappe.get_all(
+        "Loyalty Point Entry",
+        filters={"sales_invoice": sales_invoice, "redeem_against": ""},
+        fields=["loyalty_points"],
+    )
+    return (
+        first(loyalty_point_entry).get("loyalty_points")
+        if loyalty_point_entry
+        else 0.00
+    )
