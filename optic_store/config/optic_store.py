@@ -54,6 +54,18 @@ def get_data():
                 {
                     "type": "report",
                     "is_query_report": True,
+                    "name": "Payment Summary Advanced Report",
+                    "label": _("Payment Summary Advanced Report"),
+                },
+                {
+                    "type": "report",
+                    "is_query_report": True,
+                    "name": "Advanced Sales Report",
+                    "label": _("Advanced Sales Report"),
+                },
+                {
+                    "type": "report",
+                    "is_query_report": True,
                     "name": "Item-wise Stock",
                     "label": _("Item-wise Stock"),
                 },
